@@ -21,6 +21,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            build/DisplayDeck-*.dmg build/DisplayDeck-*.dmg.sha256 \
+            build/DisplayDeck.dmg build/DisplayDeck.dmg.sha256 \
             --title "DisplayDeck $GITHUB_REF_NAME" \
             --generate-notes

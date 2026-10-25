@@ -7,8 +7,8 @@ app="build/DisplayDeck.app"
 # toujours reconstruire : un DMG fait à partir d'un ancien build passerait inaperçu
 ./scripts/build-app.sh
 
-version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Contents/Info.plist")"
-dmg="build/DisplayDeck-$version.dmg"
+# nom sans version : le lien releases/latest/download/DisplayDeck.dmg du README reste valable d'une release à l'autre
+dmg="build/DisplayDeck.dmg"
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 
