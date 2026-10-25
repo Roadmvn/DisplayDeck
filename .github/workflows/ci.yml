@@ -24,12 +24,12 @@ jobs:
           archs="$(lipo -archs build/DisplayDeck.app/Contents/MacOS/DisplayDeck)"
           echo "Architectures: $archs"
           [[ "$archs" == *arm64* && "$archs" == *x86_64* ]]
-          (cd build && shasum -a 256 -c DisplayDeck-*.dmg.sha256)
+          (cd build && shasum -a 256 -c DisplayDeck.dmg.sha256)
 
       - uses: actions/upload-artifact@v7
         with:
           name: DisplayDeck-dmg
           path: |
-            build/DisplayDeck-*.dmg
-            build/DisplayDeck-*.dmg.sha256
+            build/DisplayDeck.dmg
+            build/DisplayDeck.dmg.sha256
           if-no-files-found: error
