@@ -1,0 +1,10 @@
+.build/
+build/
+*.app
+.DS_Store
+*.log
+tmp/
+.swiftpm/
+*.bak
+*_v2*
+*_new*
