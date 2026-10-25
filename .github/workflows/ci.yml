@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build app and DMG
+        run: ./scripts/make-dmg.sh
+
+      - name: Verify bundle
+        run: |
+          codesign --verify --strict build/DisplayDeck.app
+          plutil -lint build/DisplayDeck.app/Contents/Info.plist
+          archs="$(lipo -archs build/DisplayDeck.app/Contents/MacOS/DisplayDeck)"
+          echo "Architectures: $archs"
+          [[ "$archs" == *arm64* && "$archs" == *x86_64* ]]
+          (cd build && shasum -a 256 -c DisplayDeck-*.dmg.sha256)
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DisplayDeck-dmg
+          path: |
+            build/DisplayDeck-*.dmg
+            build/DisplayDeck-*.dmg.sha256
+          if-no-files-found: error
