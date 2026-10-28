@@ -5,6 +5,7 @@ struct Display: Identifiable {
     let id: CGDirectDisplayID
     let name: String
     let hasHardwareBrightness: Bool
+    let hasAutoBrightness: Bool
     let modes: [DisplayModeOption]
     let currentModeID: DisplayModeOption.ID?
 }
@@ -14,8 +15,11 @@ final class DisplayManager: ObservableObject {
     @Published private(set) var displays: [Display] = []
     @Published private(set) var ddcDevices: [CGDirectDisplayID: DDCDevice] = [:]
     @Published private(set) var dimFactors: [CGDirectDisplayID: Double] = [:]
+    @Published private(set) var brightness: [CGDirectDisplayID: Double] = [:]
+    @Published private(set) var autoBrightness: [CGDirectDisplayID: Bool] = [:]
 
     private var gammaBaselines: [CGDirectDisplayID: GammaFormula] = [:]
+    private var brightnessObservers: Set<CGDirectDisplayID> = []
     private var refreshScheduled = false
     private var screenChanges: AnyCancellable?
     private let ddcDiscoveryQueue = DispatchQueue(label: "DisplayDeck.ddc-discovery")
@@ -31,6 +35,18 @@ final class DisplayManager: ObservableObject {
 
     deinit {
         CGDisplayRemoveReconfigurationCallback(displayReconfigured, Unmanaged.passUnretained(self).toOpaque())
+        BuiltinBrightness.stopObservingAll()
+    }
+
+    func setBrightness(_ value: Double, for display: CGDirectDisplayID) {
+        // affichage immédiat : la notification qui suit confirmera la valeur retenue par l'écran
+        brightness[display] = value
+        BuiltinBrightness.set(value, on: display)
+    }
+
+    func setAutoBrightness(_ enabled: Bool, for display: CGDirectDisplayID) {
+        autoBrightness[display] = enabled
+        AmbientLight.set(enabled, on: display)
     }
 
     func setDimFactor(_ factor: Double, for display: CGDirectDisplayID) {
@@ -69,6 +85,7 @@ final class DisplayManager: ObservableObject {
                 id: id,
                 name: names[id] ?? "Écran \(id)",
                 hasHardwareBrightness: BuiltinBrightness.isSupported(id),
+                hasAutoBrightness: AmbientLight.isSupported(id),
                 modes: isOwnVirtual ? [] : DisplayModes.list(for: id),
                 currentModeID: DisplayModes.currentID(for: id)
             )
@@ -77,9 +94,48 @@ final class DisplayManager: ObservableObject {
         let online = Set(displays.map(\.id))
         dimFactors = dimFactors.filter { online.contains($0.key) }
         gammaBaselines = gammaBaselines.filter { online.contains($0.key) }
+        brightness = brightness.filter { online.contains($0.key) }
+        autoBrightness = autoBrightness.filter { online.contains($0.key) }
         // un changement de mode ou un branchement peut remettre la table gamma par défaut
         reapplyDimming()
+        refreshBrightness()
         discoverDDC()
+    }
+
+    private func refreshBrightness() {
+        for display in displays {
+            if display.hasHardwareBrightness {
+                // la clé doit exister pour que les notifications suivantes soient acceptées
+                brightness[display.id] = BuiltinBrightness.get(display.id) ?? brightness[display.id] ?? 0
+                observeBrightness(of: display.id)
+            }
+            if display.hasAutoBrightness {
+                autoBrightness[display.id] = AmbientLight.isEnabled(display.id)
+            }
+        }
+
+        // `observeBrightness` ajoute les écrans suivis ; il ne reste qu'à retirer ceux qui ont disparu
+        let observable = Set(displays.filter(\.hasHardwareBrightness).map(\.id))
+        for display in brightnessObservers.subtracting(observable) {
+            BuiltinBrightness.stopObserving(display)
+            brightnessObservers.remove(display)
+        }
+    }
+
+    private func observeBrightness(of display: CGDirectDisplayID) {
+        guard !brightnessObservers.contains(display) else { return }
+        let observed = BuiltinBrightness.observe(display, context: Unmanaged.passUnretained(self).toOpaque()) { display, value, context in
+            guard let context else { return }
+            let manager = Unmanaged<DisplayManager>.fromOpaque(context).takeUnretainedValue()
+            DispatchQueue.main.async { manager.brightnessChanged(Double(value), on: display) }
+        }
+        // sans ce garde-fou, un échec marquerait l'écran comme suivi et aucun rafraîchissement n'y reviendrait
+        if observed { brightnessObservers.insert(display) }
+    }
+
+    fileprivate func brightnessChanged(_ value: Double, on display: CGDirectDisplayID) {
+        guard brightness[display] != nil else { return }
+        brightness[display] = value
     }
 
     private func reapplyDimming() {

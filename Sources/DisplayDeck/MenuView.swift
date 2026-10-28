@@ -29,8 +29,9 @@ struct MenuView: View {
 private struct DisplaySection: View {
     let display: Display
     @ObservedObject var manager: DisplayManager
-    @State private var brightness = 0.0
     @State private var ddcValues: [VCP: VCPValue] = [:]
+
+    private static let ddcControls: [VCP] = [.brightness, .contrast, .volume]
 
     private var ddc: DDCDevice? { manager.ddcDevices[display.id] }
 
@@ -39,14 +40,26 @@ private struct DisplaySection: View {
             Text(display.name).font(.headline)
 
             if display.hasHardwareBrightness {
+                // la valeur vient du gestionnaire, qui suit aussi les touches du clavier et le capteur
                 ControlSlider(title: "Luminosité", value: Binding(
-                    get: { brightness },
-                    set: { brightness = $0; BuiltinBrightness.set($0, on: display.id) }
+                    get: { manager.brightness[display.id] ?? 0 },
+                    set: { manager.setBrightness($0, for: display.id) }
                 ))
             }
 
+            if display.hasAutoBrightness {
+                Toggle("Luminosité automatique", isOn: Binding(
+                    get: { manager.autoBrightness[display.id] ?? false },
+                    set: { manager.setAutoBrightness($0, for: display.id) }
+                ))
+                .font(.caption)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+            }
+
             if let ddc {
-                ForEach([VCP.brightness, .volume], id: \.self) { code in
+                ForEach(Self.ddcControls, id: \.self) { code in
+                    // un écran qui ne gère pas un code ne rend aucun maximum : le curseur reste masqué
                     if let value = ddcValues[code], value.maximum > 0 {
                         ControlSlider(title: code.title, icons: code.icons, value: ddcBinding(code, value, ddc))
                     }
@@ -64,15 +77,10 @@ private struct DisplaySection: View {
                 }
             }
         }
-        .onAppear {
-            if display.hasHardwareBrightness {
-                brightness = BuiltinBrightness.get(display.id) ?? brightness
-            }
-        }
         .task(id: ddc.map(ObjectIdentifier.init)) {
             ddcValues = [:]
             guard let ddc else { return }
-            for code in [VCP.brightness, .volume] {
+            for code in Self.ddcControls {
                 ddcValues[code] = await ddc.read(code)
             }
         }
@@ -94,7 +102,7 @@ private struct DisplaySection: View {
             set: { fraction in
                 let raw = UInt16((fraction * Double(value.maximum)).rounded())
                 ddcValues[code] = VCPValue(current: raw, maximum: value.maximum)
-                device.write(code, value: raw)
+                device.write(code, value: raw, of: value.maximum)
             }
         )
     }
@@ -163,6 +171,7 @@ private extension VCP {
     var title: String {
         switch self {
         case .brightness: "Luminosité"
+        case .contrast: "Contraste"
         case .volume: "Volume"
         }
     }
@@ -170,6 +179,7 @@ private extension VCP {
     var icons: (low: String, high: String) {
         switch self {
         case .brightness: ("sun.min", "sun.max")
+        case .contrast: ("circle.lefthalf.filled", "circle.righthalf.filled")
         case .volume: ("speaker.fill", "speaker.wave.3.fill")
         }
     }
