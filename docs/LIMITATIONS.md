@@ -5,7 +5,9 @@
 - DDC reads have been checked against one external monitor (a Dell P3424WE), which answered brightness, contrast and volume; writes have not been exercised on real hardware. Depending on the monitor and the connection (some docks, adapters and HDMI ports do not pass DDC through), the DDC sliders may not show up or may have no effect.
 - Monitors are matched to their DDC channel by the vendor, model and serial number read from the EDID. Two monitors that are identical down to the serial number, or whose EDID cannot be read, may still be matched in the wrong order when more than one of them is connected.
 - A virtual display's resolution is chosen when it is created. If it is changed afterwards (for example in System Settings), macOS keeps that display until DisplayDeck quits.
-- Software dimming temporarily replaces the calibration curve; it is restored by moving the slider back to the maximum or by quitting the app.
+- Software dimming and the image adjustments temporarily replace the display's colour table; they are restored by Reset, by returning every control to neutral, or by quitting the app.
+- The image adjustments curve each channel on its own, which is all a display colour table can do. Saturation, hue and vibrance need the channels mixed together and are therefore not available through this mechanism.
+- Any app that writes the display's colour table — another display utility, a calibration tool, a game — overwrites these adjustments. DisplayDeck reapplies them when displays are reconfigured, not continuously.
 - If a macOS update removes the private `OSD.framework` class behind the HUD, the controls keep working and only the HUD disappears.
 - Automatic brightness only appears for displays whose light sensor macOS exposes, which in practice means the built-in display.
 - The keyboard brightness keys act on the display the pointer is on. A background app with no window has no better signal about which display you are looking at.
