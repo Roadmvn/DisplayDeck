@@ -61,7 +61,7 @@ private struct DisplaySection: View {
             }
 
             // un écran qui ne gère pas un code ne rend aucun maximum : le curseur reste masqué
-            ForEach(VCP.allCases, id: \.self) { code in
+            ForEach(VCP.sliders, id: \.self) { code in
                 if let fraction = manager.ddcFraction(code, for: display.id) {
                     ControlSlider(title: code.title, icons: code.icons, value: Binding(
                         get: { fraction },
@@ -73,6 +73,16 @@ private struct DisplaySection: View {
             ControlSlider(title: "Assombrissement logiciel", range: 0.1...1, value: field(\.dim))
 
             ImageAdjustmentsGroup(display: display, manager: manager)
+
+            if manager.canPowerOff(display.id) {
+                HStack(spacing: 10) {
+                    Button("Éteindre l'écran") { manager.setPower(.off, for: display.id) }
+                    Button("Rallumer") { manager.setPower(.on, for: display.id) }
+                }
+                .font(.caption)
+                .buttonStyle(.link)
+                .help("Coupe l'écran lui-même. Le minimum du curseur de luminosité ne fait que baisser le rétroéclairage.")
+            }
 
             if !display.modes.isEmpty {
                 Picker("Résolution", selection: modeSelection) {
@@ -261,6 +271,7 @@ private extension VCP {
         case .brightness: "Luminosité"
         case .contrast: "Contraste"
         case .volume: "Volume"
+        case .power: "Alimentation"
         }
     }
 
@@ -269,6 +280,7 @@ private extension VCP {
         case .brightness: ("sun.min", "sun.max")
         case .contrast: ("circle.lefthalf.filled", "circle.righthalf.filled")
         case .volume: ("speaker.fill", "speaker.wave.3.fill")
+        case .power: ("powersleep", "power")
         }
     }
 }

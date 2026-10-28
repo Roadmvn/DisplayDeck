@@ -7,6 +7,17 @@ enum VCP: UInt8, CaseIterable {
     case brightness = 0x10
     case contrast = 0x12
     case volume = 0x62
+    case power = 0xD6
+
+    // `power` commande une extinction, pas un niveau : elle n'a pas de curseur.
+    static let sliders: [VCP] = [.brightness, .contrast, .volume]
+}
+
+// Valeurs d'alimentation du MCCS. Le minimum d'un curseur de luminosité n'éteint pas un écran :
+// il laisse le rétroéclairage à son plus bas, et seule cette commande le coupe vraiment.
+enum DisplayPower: UInt16 {
+    case on = 0x01
+    case off = 0x04
 }
 
 struct VCPValue {
@@ -14,12 +25,17 @@ struct VCPValue {
     let maximum: UInt16
 }
 
-// Sendable à la main : `service` n'est touché que sur `queue`, `pendingWrites` que sur le main actor.
+// Sendable à la main : `service` n'est touché que sur `queue`, `latest` et `isDraining` que sur le main actor.
 final class DDCDevice: @unchecked Sendable {
+    // Mesuré à 1,85 ms par écriture sur le bus : l'intervalle ne protège pas le bus mais le
+    // contrôleur de l'écran, que des trames trop rapprochées perturbent.
+    private static let minimumInterval = 0.05
+
     private let service: AnyObject
     private let display: CGDirectDisplayID
     private let queue: DispatchQueue
-    private var pendingWrites: [VCP: DispatchWorkItem] = [:]
+    private var latest: [VCP: (value: UInt16, maximum: UInt16)] = [:]
+    private var isDraining: Set<VCP> = []
 
     private init(service: AnyObject, display: CGDirectDisplayID) {
         self.service = service
@@ -38,20 +54,34 @@ final class DDCDevice: @unchecked Sendable {
         }
     }
 
+    // La première valeur part tout de suite ; celles qui arrivent ensuite écrasent la précédente
+    // et sortent au rythme de `minimumInterval`. Reporter chaque écriture d'un délai fixe, comme
+    // avant, ne laissait rien partir tant que la touche restait enfoncée ou le curseur en mouvement.
     @MainActor
     func write(_ code: VCP, value: UInt16, of maximum: UInt16) {
-        pendingWrites[code]?.cancel()
-        let write = DispatchWorkItem { [self] in
-            DDWriteVCP(service, code.rawValue, value)
+        latest[code] = (value, maximum)
+        guard !isDraining.contains(code) else { return }
+        isDraining.insert(code)
+        drain(code)
+    }
+
+    @MainActor
+    private func drain(_ code: VCP) {
+        guard let next = latest.removeValue(forKey: code) else {
+            isDraining.remove(code)
+            return
+        }
+        queue.async { [self] in
+            DDWriteVCP(service, code.rawValue, next.value)
             // macOS n'affiche aucun bandeau pour un écran externe : sans celui-ci, un réglage
             // lancé depuis un autre écran que celui réglé ne donne aucun retour visuel.
-            if maximum > 0 {
-                SystemOSD.show(code.osdImage, fraction: Double(value) / Double(maximum), on: display)
+            if let image = code.osdImage, next.maximum > 0 {
+                SystemOSD.show(image, fraction: Double(next.value) / Double(next.maximum), on: display)
             }
+            // bloquer cette file privée ne retient que nos propres écritures
+            Thread.sleep(forTimeInterval: Self.minimumInterval)
+            Task { @MainActor in self.drain(code) }
         }
-        pendingWrites[code] = write
-        // l'I2C est bien plus lent qu'un slider : pendant un glissement, seule la dernière valeur part
-        queue.asyncAfter(deadline: .now() + 0.1, execute: write)
     }
 
     // Bloquant (registre IOKit + lecture EDID) : à appeler hors du main thread.
@@ -117,11 +147,13 @@ private struct AVService {
 }
 
 private extension VCP {
-    var osdImage: DDOSDImage {
+    // `nil` pour une commande qui ne représente pas un niveau : aucun bandeau à montrer.
+    var osdImage: DDOSDImage? {
         switch self {
         case .brightness: DDOSDImageBrightness
         case .contrast: DDOSDImageContrast
         case .volume: DDOSDImageVolume
+        case .power: nil
         }
     }
 }
