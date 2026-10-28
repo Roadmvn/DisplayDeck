@@ -60,11 +60,13 @@ A slider only appears if the monitor answers for it. A monitor that does not imp
 
 Every change raises the same HUD macOS shows for its own brightness and volume keys, which matters when the panel is on a different screen from the monitor you are adjusting.
 
-### Turning a monitor off
+### All the way to black
 
-The bottom of a brightness slider is the monitor's lowest backlight, not darkness — no brightness control can switch a panel off. DisplayDeck sends the monitor the MCCS power command instead, for monitors that answer for it.
+A monitor's lowest backlight is still a lit picture. Hardware brightness alone never reaches black, which is why DisplayDeck's brightness control for a DDC monitor spans both: the top of the travel drives the monitor's own brightness, and once that bottoms out the rest continues in software through the display's colour table, which does reach true black.
 
-macOS is not told, so it keeps drawing to the monitor and will not wake it by itself. **Turn back on** is next to the off button.
+The brightness keys drive that same control, so they reach black — and bring it back, which makes them the way out when the darkened monitor is the only one you can see. Quitting DisplayDeck also restores the display.
+
+There is also a **DDC power off** button, which sends the monitor the MCCS power command. Not every monitor honours it and some switch straight back on, so it is offered as a convenience rather than as the way to darken a screen.
 
 ### Resolution and HiDPI
 

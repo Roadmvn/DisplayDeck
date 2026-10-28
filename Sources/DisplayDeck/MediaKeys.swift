@@ -136,7 +136,9 @@ final class MediaKeys: ObservableObject {
     private func adjust(direction: Double, isDown: Bool, fine: Bool) -> Bool {
         guard let display = targetDisplay(), displays.hasDDC(.brightness, for: display) else { return false }
         if isDown {
-            displays.stepDDC(.brightness, by: direction * (fine ? Self.fineStep : Self.step), for: display)
+            // la course combinée, pour que les touches atteignent le noir — et l'en ramènent, ce qui
+            // en fait la seule issue quand l'écran noirci est le seul utilisable
+            displays.stepCombinedBrightness(by: direction * (fine ? Self.fineStep : Self.step), for: display)
         }
         return true
     }

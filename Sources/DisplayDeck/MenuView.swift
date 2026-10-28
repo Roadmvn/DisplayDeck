@@ -60,8 +60,19 @@ private struct DisplaySection: View {
                 .controlSize(.mini)
             }
 
+            // Une seule course pour un écran DDC : le matériel d'abord, la table de couleur ensuite
+            // jusqu'au noir. Le curseur d'assombrissement séparé ferait alors double emploi.
+            if let combined = manager.combinedBrightness(for: display.id) {
+                ControlSlider(title: "Luminosité", value: Binding(
+                    get: { combined },
+                    set: { manager.setCombinedBrightness($0, for: display.id) }
+                ))
+            } else {
+                ControlSlider(title: "Assombrissement logiciel", range: 0.1...1, value: field(\.dim))
+            }
+
             // un écran qui ne gère pas un code ne rend aucun maximum : le curseur reste masqué
-            ForEach(VCP.sliders, id: \.self) { code in
+            ForEach(VCP.sliders.filter { $0 != .brightness }, id: \.self) { code in
                 if let fraction = manager.ddcFraction(code, for: display.id) {
                     ControlSlider(title: code.title, icons: code.icons, value: Binding(
                         get: { fraction },
@@ -70,18 +81,16 @@ private struct DisplaySection: View {
                 }
             }
 
-            ControlSlider(title: "Assombrissement logiciel", range: 0.1...1, value: field(\.dim))
-
             ImageAdjustmentsGroup(display: display, manager: manager)
 
             if manager.canPowerOff(display.id) {
                 HStack(spacing: 10) {
-                    Button("Éteindre l'écran") { manager.setPower(.off, for: display.id) }
+                    Button("Extinction DDC") { manager.setPower(.off, for: display.id) }
                     Button("Rallumer") { manager.setPower(.on, for: display.id) }
                 }
                 .font(.caption)
                 .buttonStyle(.link)
-                .help("Coupe l'écran lui-même. Le minimum du curseur de luminosité ne fait que baisser le rétroéclairage.")
+                .help("Commande MCCS d'extinction. Tous les écrans ne l'honorent pas, et certains se rallument seuls : pour un écran vraiment noir, descendre la luminosité jusqu'en bas.")
             }
 
             if !display.modes.isEmpty {

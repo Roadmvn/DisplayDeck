@@ -52,6 +52,38 @@ final class DisplayManager: ObservableObject {
         AmbientLight.set(enabled, on: display)
     }
 
+    // Le rétroéclairage d'une dalle ne descend jamais jusqu'au noir : son minimum reste une image
+    // éclairée. La course de luminosité épuise donc d'abord le matériel, puis le bas de la course
+    // prend le relais par la table de couleur, qui elle atteint le noir réel.
+    static let softwareShare = 0.35
+
+    func combinedBrightness(for display: CGDirectDisplayID) -> Double? {
+        guard let hardware = ddcFraction(.brightness, for: display) else { return nil }
+        let dim = adjustment(for: display).dim
+        return dim < 1 ? dim * Self.softwareShare
+                       : Self.softwareShare + hardware * (1 - Self.softwareShare)
+    }
+
+    func setCombinedBrightness(_ value: Double, for display: CGDirectDisplayID) {
+        let combined = min(max(value, 0), 1)
+        var adjustments = adjustment(for: display)
+
+        if combined >= Self.softwareShare {
+            adjustments.dim = 1
+            setDDC(.brightness, fraction: (combined - Self.softwareShare) / (1 - Self.softwareShare), for: display)
+        } else {
+            // sous le seuil, le matériel reste à son minimum et seule la table continue de descendre
+            adjustments.dim = combined / Self.softwareShare
+            setDDC(.brightness, fraction: 0, for: display)
+        }
+        setAdjustments(adjustments, for: display)
+    }
+
+    func stepCombinedBrightness(by delta: Double, for display: CGDirectDisplayID) {
+        guard let combined = combinedBrightness(for: display) else { return }
+        setCombinedBrightness(combined + delta, for: display)
+    }
+
     func hasDDC(_ code: VCP, for display: CGDirectDisplayID) -> Bool {
         ddcFraction(code, for: display) != nil
     }
