@@ -18,6 +18,7 @@ struct MenuView: View {
         }
         .padding(14)
         .frame(width: 320)
+        .onAppear { displays.refreshBrightnessValues() }
     }
 
     private func quit() {

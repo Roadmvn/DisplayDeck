@@ -61,9 +61,8 @@ final class DDCDevice: @unchecked Sendable {
         var devices: [CGDirectDisplayID: DDCDevice] = [:]
         var unmatched: [CGDirectDisplayID] = []
 
+        // Première passe avec le numéro de série, qui seul distingue deux écrans du même modèle.
         for display in displays {
-            // le numéro de série distingue deux écrans de même modèle, que le couple
-            // fabricant/modèle seul associait dans un ordre arbitraire
             let identity = EDIDIdentity(
                 vendor: CGDisplayVendorNumber(display),
                 product: CGDisplayModelNumber(display),
@@ -75,6 +74,17 @@ final class DDCDevice: @unchecked Sendable {
                 unmatched.append(display)
             }
         }
+
+        // Tous les écrans ne publient pas leur série dans les octets 12-15 de l'EDID : certains la
+        // rangent dans un bloc descripteur, que CoreGraphics peut résumer autrement. Retomber sur
+        // fabricant/modèle préserve alors l'appariement que la seule première passe aurait perdu.
+        for display in unmatched {
+            let identity = EDIDIdentity(vendor: CGDisplayVendorNumber(display), product: CGDisplayModelNumber(display), serial: nil)
+            if let index = services.firstIndex(where: { $0.identity?.ignoringSerial == identity }) {
+                devices[display] = DDCDevice(service: services.remove(at: index).ref, display: display)
+            }
+        }
+        unmatched.removeAll { devices[$0] != nil }
         // EDID illisible ou incohérent : avec un seul candidat de chaque côté, l'association reste sans ambiguïté
         if unmatched.count == 1, services.count == 1 {
             devices[unmatched[0]] = DDCDevice(service: services[0].ref, display: unmatched[0])
@@ -86,7 +96,9 @@ final class DDCDevice: @unchecked Sendable {
 private struct EDIDIdentity: Equatable {
     let vendor: UInt32
     let product: UInt32
-    let serial: UInt32
+    let serial: UInt32?
+
+    var ignoringSerial: EDIDIdentity { EDIDIdentity(vendor: vendor, product: product, serial: nil) }
 }
 
 private struct AVService {
