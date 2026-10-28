@@ -102,6 +102,12 @@ final class DisplayManager: ObservableObject {
         discoverDDC()
     }
 
+    // Les notifications suffisent quand elles répondent ; cette relecture à l'ouverture du menu
+    // garde le curseur juste même si l'inscription a échoué.
+    func refreshBrightnessValues() {
+        refreshBrightness()
+    }
+
     private func refreshBrightness() {
         for display in displays {
             if display.hasHardwareBrightness {
