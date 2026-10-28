@@ -27,6 +27,21 @@ The slider tracks the system: press the keyboard keys, let the light sensor move
 
 **Software dimming** goes below what the hardware allows by reshaping the display's colour curve, so it works on any display — including one with no DDC at all. It is restored by moving the slider back to the maximum or by quitting the app.
 
+### Image adjustments
+
+Contrast, gamma, colour temperature and colour inversion, on any display, applied on top of the display's own calibration rather than replacing it.
+
+| | |
+|---|---|
+| **Contrast** | Steepens or flattens the curve around mid grey |
+| **Gamma** | Lifts or drops the midtones without moving black or white |
+| **Temperature** | Warms or cools by removing from a channel, never by adding, so nothing clips |
+| **Invert** | Reverses the curve |
+
+These run through the display's colour table, which curves each channel on its own. That is why there is no saturation, hue or vibrance here: mixing channels is beyond what a per-channel table can express, and would need a compositing layer over the whole screen.
+
+Leaving every adjustment at its neutral position reproduces the display's calibrated table exactly, so opening the panel never changes what you see. **Reset** returns the display to its profile.
+
 ### Keyboard brightness keys on external monitors
 
 The brightness keys normally only reach the built-in display. DisplayDeck intercepts them and sends the change over DDC to **the monitor your pointer is on**. If that display has no DDC brightness, the keys are left alone and macOS handles them as usual.
@@ -87,7 +102,7 @@ DisplayDeck is a SwiftUI `MenuBarExtra` with a thin Objective-C layer over the A
 | External monitor control | DDC/CI over `IOAVService` — Apple Silicon only |
 | Keyboard key interception | `CGEventTap` on system-defined events |
 | System HUD | `OSDManager` from `OSD.framework` (private) |
-| Software dimming | `CGSetDisplayTransferByFormula` |
+| Software dimming, image adjustments | `CGSetDisplayTransferByTable` |
 | Virtual displays | `CGVirtualDisplay` (private CoreGraphics classes) |
 | Resolution | `CGDisplayCopyAllDisplayModes` |
 

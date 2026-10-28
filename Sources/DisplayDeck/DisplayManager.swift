@@ -14,13 +14,14 @@ struct Display: Identifiable {
 final class DisplayManager: ObservableObject {
     @Published private(set) var displays: [Display] = []
     @Published private(set) var ddcDevices: [CGDirectDisplayID: DDCDevice] = [:]
-    @Published private(set) var dimFactors: [CGDirectDisplayID: Double] = [:]
+    @Published private(set) var adjustments: [CGDirectDisplayID: ImageAdjustments] = [:]
     @Published private(set) var brightness: [CGDirectDisplayID: Double] = [:]
     // Détenues ici et non dans la vue : le clavier règle les mêmes valeurs que les curseurs.
     @Published private(set) var ddcValues: [CGDirectDisplayID: [VCP: VCPValue]] = [:]
     @Published private(set) var autoBrightness: [CGDirectDisplayID: Bool] = [:]
 
-    private var gammaBaselines: [CGDirectDisplayID: GammaFormula] = [:]
+    // Capturée avant la première retouche : elle porte l'étalonnage et sert de point de départ.
+    private var colorBaselines: [CGDirectDisplayID: ColorTable] = [:]
     private var brightnessObservers: Set<CGDirectDisplayID> = []
     private var refreshScheduled = false
     private var screenChanges: AnyCancellable?
@@ -74,20 +75,24 @@ final class DisplayManager: ObservableObject {
         setDDC(code, fraction: fraction + delta, for: display)
     }
 
-    func setDimFactor(_ factor: Double, for display: CGDirectDisplayID) {
-        guard factor < 1 else {
-            dimFactors[display] = nil
-            gammaBaselines[display] = nil
+    func adjustment(for display: CGDirectDisplayID) -> ImageAdjustments {
+        adjustments[display] ?? .neutral
+    }
+
+    func setAdjustments(_ value: ImageAdjustments, for display: CGDirectDisplayID) {
+        guard !value.isNeutral else {
+            adjustments[display] = nil
+            colorBaselines[display] = nil
             // la restauration ColorSync vaut pour tous les écrans, d'où la réapplication des autres
             CGDisplayRestoreColorSyncSettings()
-            reapplyDimming()
+            reapplyAdjustments()
             return
         }
-        if gammaBaselines[display] == nil {
-            gammaBaselines[display] = GammaFormula.current(of: display)
+        if colorBaselines[display] == nil {
+            colorBaselines[display] = ColorTable.current(of: display)
         }
-        dimFactors[display] = factor
-        gammaBaselines[display]?.apply(dimmedBy: factor, to: display)
+        adjustments[display] = value
+        colorBaselines[display]?.applying(value).apply(to: display)
     }
 
     fileprivate func setNeedsRefresh() {
@@ -117,12 +122,12 @@ final class DisplayManager: ObservableObject {
         }
 
         let online = Set(displays.map(\.id))
-        dimFactors = dimFactors.filter { online.contains($0.key) }
-        gammaBaselines = gammaBaselines.filter { online.contains($0.key) }
+        adjustments = adjustments.filter { online.contains($0.key) }
+        colorBaselines = colorBaselines.filter { online.contains($0.key) }
         brightness = brightness.filter { online.contains($0.key) }
         autoBrightness = autoBrightness.filter { online.contains($0.key) }
-        // un changement de mode ou un branchement peut remettre la table gamma par défaut
-        reapplyDimming()
+        // un changement de mode ou un branchement peut remettre la table de couleur par défaut
+        reapplyAdjustments()
         refreshBrightness()
         discoverDDC()
     }
@@ -169,9 +174,9 @@ final class DisplayManager: ObservableObject {
         brightness[display] = value
     }
 
-    private func reapplyDimming() {
-        for (display, factor) in dimFactors {
-            gammaBaselines[display]?.apply(dimmedBy: factor, to: display)
+    private func reapplyAdjustments() {
+        for (display, value) in adjustments {
+            colorBaselines[display]?.applying(value).apply(to: display)
         }
     }
 

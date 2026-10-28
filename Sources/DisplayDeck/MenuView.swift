@@ -70,10 +70,9 @@ private struct DisplaySection: View {
                 }
             }
 
-            ControlSlider(title: "Assombrissement logiciel", range: 0.1...1, value: Binding(
-                get: { manager.dimFactors[display.id] ?? 1 },
-                set: { manager.setDimFactor($0, for: display.id) }
-            ))
+            ControlSlider(title: "Assombrissement logiciel", range: 0.1...1, value: field(\.dim))
+
+            ImageAdjustmentsGroup(display: display, manager: manager)
 
             if !display.modes.isEmpty {
                 Picker("Résolution", selection: modeSelection) {
@@ -81,6 +80,18 @@ private struct DisplaySection: View {
                 }
             }
         }
+    }
+
+    // Chaque curseur écrit un seul champ : le reste des réglages de l'écran est repris tel quel.
+    private func field(_ key: WritableKeyPath<ImageAdjustments, Double>) -> Binding<Double> {
+        Binding(
+            get: { manager.adjustment(for: display.id)[keyPath: key] },
+            set: { value in
+                var adjustments = manager.adjustment(for: display.id)
+                adjustments[keyPath: key] = value
+                manager.setAdjustments(adjustments, for: display.id)
+            }
+        )
     }
 
     private var modeSelection: Binding<DisplayModeOption.ID?> {
@@ -93,6 +104,64 @@ private struct DisplaySection: View {
         )
     }
 
+}
+
+// Repliés : cinq réglages de plus par écran déborderaient un panneau de barre des menus.
+private struct ImageAdjustmentsGroup: View {
+    let display: Display
+    @ObservedObject var manager: DisplayManager
+    @State private var isExpanded = false
+
+    private var adjustments: ImageAdjustments { manager.adjustment(for: display.id) }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                ControlSlider(title: "Contraste", icons: ("circle.lefthalf.filled", "circle.righthalf.filled"),
+                              range: -1...1, value: field(\.contrast))
+                ControlSlider(title: "Gamma", icons: ("moon", "sun.max"),
+                              range: -1...1, value: field(\.gamma))
+                ControlSlider(title: "Température", icons: ("flame", "snowflake"),
+                              range: -1...1, value: field(\.temperature))
+
+                Toggle("Inverser les couleurs", isOn: Binding(
+                    get: { adjustments.isInverted },
+                    set: { value in
+                        var next = adjustments
+                        next.isInverted = value
+                        manager.setAdjustments(next, for: display.id)
+                    }
+                ))
+                .font(.caption)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+
+                Button("Réinitialiser") { manager.setAdjustments(.neutral, for: display.id) }
+                    .font(.caption)
+                    .buttonStyle(.link)
+                    .disabled(adjustments.isNeutral)
+            }
+            .padding(.top, 4)
+        } label: {
+            HStack {
+                Text("Réglages d'image").font(.caption).foregroundStyle(.secondary)
+                if !adjustments.isNeutral {
+                    Image(systemName: "circle.fill").font(.system(size: 5)).foregroundStyle(.tint)
+                }
+            }
+        }
+    }
+
+    private func field(_ key: WritableKeyPath<ImageAdjustments, Double>) -> Binding<Double> {
+        Binding(
+            get: { adjustments[keyPath: key] },
+            set: { value in
+                var next = adjustments
+                next[keyPath: key] = value
+                manager.setAdjustments(next, for: display.id)
+            }
+        )
+    }
 }
 
 private struct KeyboardSection: View {
