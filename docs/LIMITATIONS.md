@@ -8,3 +8,6 @@
 - Software dimming temporarily replaces the calibration curve; it is restored by moving the slider back to the maximum or by quitting the app.
 - If a macOS update removes the private `OSD.framework` class behind the HUD, the controls keep working and only the HUD disappears.
 - Automatic brightness only appears for displays whose light sensor macOS exposes, which in practice means the built-in display.
+- The keyboard brightness keys act on the display the pointer is on. A background app with no window has no better signal about which display you are looking at.
+- Intercepting the brightness keys needs Accessibility permission, and macOS ties that permission to the app's signature. The DMG is signed ad-hoc, so rebuilding or replacing the app can invalidate the grant and require turning it off and on again in System Settings.
+- The event tap is removed by macOS if the app ever stops answering it in time. It is re-enabled automatically, but a keypress may be missed when that happens.

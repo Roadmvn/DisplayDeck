@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuView: View {
     @ObservedObject var displays: DisplayManager
     @ObservedObject var virtualDisplays: VirtualDisplays
+    @ObservedObject var mediaKeys: MediaKeys
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -13,12 +14,18 @@ struct MenuView: View {
             }
             VirtualDisplaysSection(model: virtualDisplays)
             Divider()
+            KeyboardSection(mediaKeys: mediaKeys)
+            Divider()
             Button("Quitter DisplayDeck", action: quit)
                 .keyboardShortcut("q")
         }
         .padding(14)
         .frame(width: 320)
-        .onAppear { displays.refreshBrightnessValues() }
+        .onAppear {
+            displays.refreshBrightnessValues()
+            // l'autorisation peut avoir été accordée depuis la dernière ouverture
+            mediaKeys.refreshAuthorization()
+        }
     }
 
     private func quit() {
@@ -30,11 +37,6 @@ struct MenuView: View {
 private struct DisplaySection: View {
     let display: Display
     @ObservedObject var manager: DisplayManager
-    @State private var ddcValues: [VCP: VCPValue] = [:]
-
-    private static let ddcControls: [VCP] = [.brightness, .contrast, .volume]
-
-    private var ddc: DDCDevice? { manager.ddcDevices[display.id] }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -58,12 +60,13 @@ private struct DisplaySection: View {
                 .controlSize(.mini)
             }
 
-            if let ddc {
-                ForEach(Self.ddcControls, id: \.self) { code in
-                    // un écran qui ne gère pas un code ne rend aucun maximum : le curseur reste masqué
-                    if let value = ddcValues[code], value.maximum > 0 {
-                        ControlSlider(title: code.title, icons: code.icons, value: ddcBinding(code, value, ddc))
-                    }
+            // un écran qui ne gère pas un code ne rend aucun maximum : le curseur reste masqué
+            ForEach(VCP.allCases, id: \.self) { code in
+                if let fraction = manager.ddcFraction(code, for: display.id) {
+                    ControlSlider(title: code.title, icons: code.icons, value: Binding(
+                        get: { fraction },
+                        set: { manager.setDDC(code, fraction: $0, for: display.id) }
+                    ))
                 }
             }
 
@@ -78,13 +81,6 @@ private struct DisplaySection: View {
                 }
             }
         }
-        .task(id: ddc.map(ObjectIdentifier.init)) {
-            ddcValues = [:]
-            guard let ddc else { return }
-            for code in Self.ddcControls {
-                ddcValues[code] = await ddc.read(code)
-            }
-        }
     }
 
     private var modeSelection: Binding<DisplayModeOption.ID?> {
@@ -97,15 +93,37 @@ private struct DisplaySection: View {
         )
     }
 
-    private func ddcBinding(_ code: VCP, _ value: VCPValue, _ device: DDCDevice) -> Binding<Double> {
-        Binding(
-            get: { Double(value.current) / Double(value.maximum) },
-            set: { fraction in
-                let raw = UInt16((fraction * Double(value.maximum)).rounded())
-                ddcValues[code] = VCPValue(current: raw, maximum: value.maximum)
-                device.write(code, value: raw, of: value.maximum)
+}
+
+private struct KeyboardSection: View {
+    @ObservedObject var mediaKeys: MediaKeys
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Touches du clavier").font(.headline)
+
+            Toggle("Luminosité de l'écran sous le pointeur", isOn: $mediaKeys.isEnabled)
+                .font(.caption)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .disabled(!mediaKeys.isAuthorized)
+
+            if mediaKeys.isAuthorized {
+                Text("Majuscule + Option pour un pas fin.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Intercepter les touches de luminosité demande l'accès à l'accessibilité.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button("Autoriser…") { mediaKeys.requestAuthorization() }
+                    Button("Ouvrir les Réglages") { MediaKeys.openAccessibilitySettings() }
+                }
+                .font(.caption)
+                .buttonStyle(.link)
             }
-        )
+        }
     }
 }
 
