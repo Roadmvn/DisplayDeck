@@ -16,6 +16,8 @@ final class DisplayManager: ObservableObject {
     @Published private(set) var ddcDevices: [CGDirectDisplayID: DDCDevice] = [:]
     @Published private(set) var dimFactors: [CGDirectDisplayID: Double] = [:]
     @Published private(set) var brightness: [CGDirectDisplayID: Double] = [:]
+    // Détenues ici et non dans la vue : le clavier règle les mêmes valeurs que les curseurs.
+    @Published private(set) var ddcValues: [CGDirectDisplayID: [VCP: VCPValue]] = [:]
     @Published private(set) var autoBrightness: [CGDirectDisplayID: Bool] = [:]
 
     private var gammaBaselines: [CGDirectDisplayID: GammaFormula] = [:]
@@ -47,6 +49,29 @@ final class DisplayManager: ObservableObject {
     func setAutoBrightness(_ enabled: Bool, for display: CGDirectDisplayID) {
         autoBrightness[display] = enabled
         AmbientLight.set(enabled, on: display)
+    }
+
+    func hasDDC(_ code: VCP, for display: CGDirectDisplayID) -> Bool {
+        ddcFraction(code, for: display) != nil
+    }
+
+    func ddcFraction(_ code: VCP, for display: CGDirectDisplayID) -> Double? {
+        guard let value = ddcValues[display]?[code], value.maximum > 0 else { return nil }
+        return Double(value.current) / Double(value.maximum)
+    }
+
+    func setDDC(_ code: VCP, fraction: Double, for display: CGDirectDisplayID) {
+        guard let device = ddcDevices[display],
+              let value = ddcValues[display]?[code], value.maximum > 0
+        else { return }
+        let raw = UInt16((min(max(fraction, 0), 1) * Double(value.maximum)).rounded())
+        ddcValues[display]?[code] = VCPValue(current: raw, maximum: value.maximum)
+        device.write(code, value: raw, of: value.maximum)
+    }
+
+    func stepDDC(_ code: VCP, by delta: Double, for display: CGDirectDisplayID) {
+        guard let fraction = ddcFraction(code, for: display) else { return }
+        setDDC(code, fraction: fraction + delta, for: display)
     }
 
     func setDimFactor(_ factor: Double, for display: CGDirectDisplayID) {
@@ -157,7 +182,25 @@ final class DisplayManager: ObservableObject {
         // file série : les découvertes se terminent dans l'ordre, la dernière configuration l'emporte toujours
         ddcDiscoveryQueue.async {
             let devices = DDCDevice.discover(for: externals)
-            DispatchQueue.main.async { self.ddcDevices = devices }
+            DispatchQueue.main.async {
+                self.ddcDevices = devices
+                self.readDDCValues()
+            }
+        }
+    }
+
+    private func readDDCValues() {
+        ddcValues = ddcValues.filter { ddcDevices[$0.key] != nil }
+        for (display, device) in ddcDevices {
+            Task { @MainActor in
+                var values: [VCP: VCPValue] = [:]
+                for code in VCP.allCases {
+                    values[code] = await device.read(code)
+                }
+                // chaque lecture coûte un aller-retour I2C : la configuration a pu changer entretemps
+                guard self.ddcDevices[display] === device else { return }
+                self.ddcValues[display] = values
+            }
         }
     }
 

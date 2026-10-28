@@ -3,7 +3,7 @@ import CPrivateAPI
 import Foundation
 
 // Codes MCCS : un écran n'est pas tenu de les gérer tous, d'où la lecture avant affichage.
-enum VCP: UInt8 {
+enum VCP: UInt8, CaseIterable {
     case brightness = 0x10
     case contrast = 0x12
     case volume = 0x62
