@@ -188,9 +188,19 @@ private struct KeyboardSection: View {
                 .disabled(!mediaKeys.isAuthorized)
 
             if mediaKeys.isAuthorized {
-                Text("Majuscule + Option pour un pas fin.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if mediaKeys.isEnabled && !mediaKeys.isIntercepting {
+                    // cas typique après une mise à jour : l'autorisation vise l'ancienne version
+                    Text("macOS déclare l'app autorisée mais refuse l'interception. Retirez DisplayDeck de la liste d'accessibilité puis rajoutez-le.")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    Button("Ouvrir les Réglages") { MediaKeys.openAccessibilitySettings() }
+                        .font(.caption)
+                        .buttonStyle(.link)
+                } else {
+                    Text("Majuscule + Option pour un pas fin.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("Intercepter les touches de luminosité demande l'accès à l'accessibilité.")
                     .font(.caption2)

@@ -86,6 +86,8 @@ xattr -dr com.apple.quarantine /Applications/DisplayDeck.app
 
 To use the keyboard brightness keys, grant Accessibility in **System Settings → Privacy & Security → Accessibility**. The panel links straight there.
 
+**After every update, do it again.** The app is signed ad-hoc, so each build has a different code signature, and macOS matches the Accessibility grant against the signature of the version that was granted. The old entry stays in the list and looks correct while interception is refused. Remove DisplayDeck from the list with the **−** button and add the new copy back. The panel says so when it detects the mismatch.
+
 ## Build from source
 
 ```bash
