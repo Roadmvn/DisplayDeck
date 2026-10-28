@@ -4,9 +4,9 @@ A macOS menu bar app to control your displays.
 
 **[Download DisplayDeck.dmg](https://github.com/Roadmvn/DisplayDeck/releases/latest/download/DisplayDeck.dmg)** · [All releases](https://github.com/Roadmvn/DisplayDeck/releases)
 
-- Built-in display brightness and software dimming for any display
+- Built-in display brightness and software dimming for any display, with automatic brightness where a light sensor is available
 - HiDPI virtual displays
-- DDC/CI brightness and volume for external monitors
+- DDC/CI brightness, contrast and volume for external monitors, reported through the system HUD
 - Resolution switching, HiDPI modes included
 
 Requires macOS 13 or later. DDC requires Apple Silicon.

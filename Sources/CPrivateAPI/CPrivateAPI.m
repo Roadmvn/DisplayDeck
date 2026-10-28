@@ -10,6 +10,12 @@ static struct {
     bool (*canChange)(CGDirectDisplayID);
     int (*get)(CGDirectDisplayID, float *);
     int (*set)(CGDirectDisplayID, float);
+    int (*observe)(CGDirectDisplayID, void *, CFNotificationCallback);
+    int (*stopObserving)(CGDirectDisplayID, void *);
+    bool (*hasAmbient)(CGDirectDisplayID);
+    // Celle-ci rend un code de retour et écrit dans un paramètre de sortie, contrairement à `hasAmbient`.
+    int (*ambientEnabled)(CGDirectDisplayID, bool *);
+    int (*setAmbient)(CGDirectDisplayID, bool);
 } DisplayServices;
 
 static void LoadDisplayServices(void) {
@@ -20,6 +26,11 @@ static void LoadDisplayServices(void) {
         DisplayServices.canChange = dlsym(handle, "DisplayServicesCanChangeBrightness");
         DisplayServices.get = dlsym(handle, "DisplayServicesGetBrightness");
         DisplayServices.set = dlsym(handle, "DisplayServicesSetBrightness");
+        DisplayServices.observe = dlsym(handle, "DisplayServicesRegisterForBrightnessChangeNotifications");
+        DisplayServices.stopObserving = dlsym(handle, "DisplayServicesUnregisterForBrightnessChangeNotifications");
+        DisplayServices.hasAmbient = dlsym(handle, "DisplayServicesHasAmbientLightCompensation");
+        DisplayServices.ambientEnabled = dlsym(handle, "DisplayServicesAmbientLightCompensationEnabled");
+        DisplayServices.setAmbient = dlsym(handle, "DisplayServicesEnableAmbientLightCompensation");
     });
 }
 
@@ -37,6 +48,125 @@ bool DDGetBrightness(CGDirectDisplayID display, float *value) {
 void DDSetBrightness(CGDirectDisplayID display, float value) {
     LoadDisplayServices();
     if (DisplayServices.set != NULL) DisplayServices.set(display, value);
+}
+
+#pragma mark - Notifications de luminosité
+
+// DisplayServices rend la valeur à un rappel CFNotificationCenter et ne repasse que le pointeur
+// d'observateur : on y place la structure d'inscription pour retrouver l'écran et le destinataire.
+typedef struct {
+    CGDirectDisplayID display;
+    DDBrightnessObserver observer;
+    void *context;
+} DDBrightnessRegistration;
+
+static NSMutableDictionary<NSNumber *, NSValue *> *BrightnessRegistrations(void) {
+    static NSMutableDictionary *registrations;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ registrations = [NSMutableDictionary dictionary]; });
+    return registrations;
+}
+
+static void BrightnessChanged(CFNotificationCenterRef center, void *observer, CFNotificationName name,
+                              const void *object, CFDictionaryRef userInfo) {
+    DDBrightnessRegistration *registration = observer;
+    if (registration == NULL || registration->observer == NULL) return;
+    NSNumber *value = ((__bridge NSDictionary *)userInfo)[@"value"];
+    if (value == nil) return;
+    registration->observer(registration->display, value.floatValue, registration->context);
+}
+
+bool DDObserveBrightness(CGDirectDisplayID display, void *context, DDBrightnessObserver observer) {
+    LoadDisplayServices();
+    if (DisplayServices.observe == NULL) return false;
+    // une seule inscription par écran : réinscrire sans arrêter l'ancienne fuirait sa structure
+    DDStopObservingBrightness(display);
+
+    DDBrightnessRegistration *registration = malloc(sizeof(DDBrightnessRegistration));
+    if (registration == NULL) return false;
+    *registration = (DDBrightnessRegistration){ .display = display, .observer = observer, .context = context };
+
+    if (DisplayServices.observe(display, registration, BrightnessChanged) != 0) {
+        free(registration);
+        return false;
+    }
+    BrightnessRegistrations()[@(display)] = [NSValue valueWithPointer:registration];
+    return true;
+}
+
+void DDStopObservingBrightness(CGDirectDisplayID display) {
+    LoadDisplayServices();
+    NSValue *stored = BrightnessRegistrations()[@(display)];
+    if (stored == nil) return;
+    [BrightnessRegistrations() removeObjectForKey:@(display)];
+    DDBrightnessRegistration *registration = stored.pointerValue;
+    if (DisplayServices.stopObserving != NULL) DisplayServices.stopObserving(display, registration);
+    free(registration);
+}
+
+void DDStopObservingAllBrightness(void) {
+    for (NSNumber *display in BrightnessRegistrations().allKeys) {
+        DDStopObservingBrightness(display.unsignedIntValue);
+    }
+}
+
+#pragma mark - Luminosité automatique
+
+bool DDHasAmbientLightCompensation(CGDirectDisplayID display) {
+    LoadDisplayServices();
+    return DisplayServices.hasAmbient != NULL && DisplayServices.ambientEnabled != NULL
+        && DisplayServices.setAmbient != NULL && DisplayServices.hasAmbient(display);
+}
+
+bool DDAmbientLightCompensationEnabled(CGDirectDisplayID display) {
+    LoadDisplayServices();
+    if (DisplayServices.ambientEnabled == NULL) return false;
+    bool enabled = false;
+    return DisplayServices.ambientEnabled(display, &enabled) == 0 && enabled;
+}
+
+void DDSetAmbientLightCompensation(CGDirectDisplayID display, bool enabled) {
+    LoadDisplayServices();
+    if (DisplayServices.setAmbient != NULL) DisplayServices.setAmbient(display, enabled);
+}
+
+#pragma mark - Bandeau système
+
+// Classe privée d'OSD.framework, qui n'est pas lié : on passe par le nom à l'exécution.
+@interface DDOSDManagerProxy : NSObject
+- (void)showImage:(long long)image
+      onDisplayID:(CGDirectDisplayID)display
+         priority:(unsigned int)priority
+    msecUntilFade:(unsigned int)msec
+   filledChiclets:(unsigned int)filled
+    totalChiclets:(unsigned int)total
+           locked:(BOOL)locked;
+@end
+
+static DDOSDManagerProxy *_Nullable OSDManager(void) {
+    static DDOSDManagerProxy *manager;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        if (dlopen("/System/Library/PrivateFrameworks/OSD.framework/Versions/A/OSD", RTLD_LAZY) == NULL) return;
+        Class class = NSClassFromString(@"OSDManager");
+        if (![class respondsToSelector:@selector(sharedManager)]) return;
+        manager = [class performSelector:@selector(sharedManager)];
+    });
+    return manager;
+}
+
+void DDShowOSD(DDOSDImage image, CGDirectDisplayID display, uint32_t filled, uint32_t total) {
+    DDOSDManagerProxy *manager = OSDManager();
+    SEL show = @selector(showImage:onDisplayID:priority:msecUntilFade:filledChiclets:totalChiclets:locked:);
+    if (![manager respondsToSelector:show]) return;
+    // 0x1f4 : la priorité qu'emploient les bandeaux de luminosité et de volume de macOS
+    [manager showImage:image
+          onDisplayID:display
+             priority:0x1f4
+        msecUntilFade:1000
+       filledChiclets:filled
+        totalChiclets:total
+               locked:NO];
 }
 
 #pragma mark - IOAVService / DDC
@@ -73,14 +203,16 @@ NSArray *DDExternalAVServices(void) {
     return services;
 }
 
-bool DDReadEDIDIdentity(CFTypeRef service, uint32_t *vendor, uint32_t *product) {
+bool DDReadEDIDIdentity(CFTypeRef service, uint32_t *vendor, uint32_t *product, uint32_t *serial) {
     CFDataRef raw = NULL;
     IOReturn status = IOAVServiceCopyEDID(service, &raw);
     NSData *edid = CFBridgingRelease(raw);
-    if (status != kIOReturnSuccess || edid.length < 12) return false;
+    if (status != kIOReturnSuccess || edid.length < 16) return false;
     const uint8_t *bytes = edid.bytes;
     *vendor = (uint32_t)bytes[8] << 8 | bytes[9];
     *product = (uint32_t)bytes[11] << 8 | bytes[10];
+    // octets 12-15 de l'EDID, en petit-boutien : c'est ce que rend aussi CGDisplaySerialNumber
+    *serial = (uint32_t)bytes[15] << 24 | (uint32_t)bytes[14] << 16 | (uint32_t)bytes[13] << 8 | bytes[12];
     return true;
 }
 
