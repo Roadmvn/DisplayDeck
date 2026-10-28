@@ -70,6 +70,16 @@ final class DisplayManager: ObservableObject {
         device.write(code, value: raw, of: value.maximum)
     }
 
+    // L'écran répond encore au DDC une fois éteint, donc il peut être rallumé d'ici.
+    func canPowerOff(_ display: CGDirectDisplayID) -> Bool {
+        (ddcValues[display]?[.power]?.maximum ?? 0) > 0
+    }
+
+    func setPower(_ power: DisplayPower, for display: CGDirectDisplayID) {
+        guard let device = ddcDevices[display], canPowerOff(display) else { return }
+        device.write(.power, value: power.rawValue, of: 0)
+    }
+
     func stepDDC(_ code: VCP, by delta: Double, for display: CGDirectDisplayID) {
         guard let fraction = ddcFraction(code, for: display) else { return }
         setDDC(code, fraction: fraction + delta, for: display)

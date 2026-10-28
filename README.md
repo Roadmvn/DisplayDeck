@@ -60,6 +60,12 @@ A slider only appears if the monitor answers for it. A monitor that does not imp
 
 Every change raises the same HUD macOS shows for its own brightness and volume keys, which matters when the panel is on a different screen from the monitor you are adjusting.
 
+### Turning a monitor off
+
+The bottom of a brightness slider is the monitor's lowest backlight, not darkness — no brightness control can switch a panel off. DisplayDeck sends the monitor the MCCS power command instead, for monitors that answer for it.
+
+macOS is not told, so it keeps drawing to the monitor and will not wake it by itself. **Turn back on** is next to the off button.
+
 ### Resolution and HiDPI
 
 Every mode the display reports, including the HiDPI modes System Settings hides, with the refresh rate.
@@ -79,6 +85,8 @@ xattr -dr com.apple.quarantine /Applications/DisplayDeck.app
 ```
 
 To use the keyboard brightness keys, grant Accessibility in **System Settings → Privacy & Security → Accessibility**. The panel links straight there.
+
+**After every update, do it again.** The app is signed ad-hoc, so each build has a different code signature, and macOS matches the Accessibility grant against the signature of the version that was granted. The old entry stays in the list and looks correct while interception is refused. Remove DisplayDeck from the list with the **−** button and add the new copy back. The panel says so when it detects the mismatch.
 
 ## Build from source
 

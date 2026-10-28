@@ -10,6 +10,8 @@
 - Any app that writes the display's colour table — another display utility, a calibration tool, a game — overwrites these adjustments. DisplayDeck reapplies them when displays are reconfigured, not continuously.
 - If a macOS update removes the private `OSD.framework` class behind the HUD, the controls keep working and only the HUD disappears.
 - Automatic brightness only appears for displays whose light sensor macOS exposes, which in practice means the built-in display.
+- The bottom of a DDC brightness slider is the monitor's lowest backlight, not darkness. Turning a monitor off is a separate command, which only appears for monitors that answer for it.
+- Turning a monitor off over DDC leaves macOS believing it is still connected, so it keeps drawing to it and will not wake it on its own. Turn it back on from the panel, or from the monitor's own buttons.
 - The keyboard brightness keys act on the display the pointer is on. A background app with no window has no better signal about which display you are looking at.
-- Intercepting the brightness keys needs Accessibility permission, and macOS ties that permission to the app's signature. The DMG is signed ad-hoc, so rebuilding or replacing the app can invalidate the grant and require turning it off and on again in System Settings.
+- Intercepting the brightness keys needs Accessibility permission, and macOS ties that permission to the app's signature. The DMG is signed ad-hoc, so **every update invalidates the grant**: the signature hash is reproducible for identical sources but changes with any code change. The old entry remains in the Accessibility list and looks granted, while the event tap is refused. Removing the entry and adding the new copy restores it. A real signing identity would make the grant survive updates.
 - The event tap is removed by macOS if the app ever stops answering it in time. It is re-enabled automatically, but a keypress may be missed when that happens.

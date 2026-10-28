@@ -21,6 +21,10 @@ final class MediaKeys: ObservableObject {
     nonisolated private static let systemDefined = UInt32(NSEvent.EventType.systemDefined.rawValue)
 
     @Published private(set) var isAuthorized = AXIsProcessTrusted()
+    // macOS peut déclarer l'app autorisée tout en refusant le tap, quand l'entrée d'accessibilité
+    // garde l'empreinte d'une version précédente. Sans ce témoin, le panneau paraîtrait en ordre
+    // alors que plus aucune touche n'est interceptée.
+    @Published private(set) var isIntercepting = false
     @Published var isEnabled: Bool {
         didSet {
             UserDefaults.standard.set(isEnabled, forKey: Self.enabledKey)
@@ -76,9 +80,11 @@ final class MediaKeys: ObservableObject {
         CGEvent.tapEnable(tap: tap, enable: true)
         self.tap = tap
         runLoopSource = source
+        isIntercepting = true
     }
 
     private func stop() {
+        isIntercepting = false
         guard let tap else { return }
         CGEvent.tapEnable(tap: tap, enable: false)
         if let runLoopSource {
@@ -86,6 +92,7 @@ final class MediaKeys: ObservableObject {
         }
         self.tap = nil
         runLoopSource = nil
+        isIntercepting = false
     }
 
     // `nonisolated` car le tap appelle ceci directement ; `CGEvent` n'est pas `Sendable`, donc le
