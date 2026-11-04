@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -18,13 +16,7 @@ jobs:
         run: ./scripts/make-dmg.sh
 
       - name: Verify bundle
-        run: |
-          codesign --verify --strict build/DisplayDeck.app
-          plutil -lint build/DisplayDeck.app/Contents/Info.plist
-          archs="$(lipo -archs build/DisplayDeck.app/Contents/MacOS/DisplayDeck)"
-          echo "Architectures: $archs"
-          [[ "$archs" == *arm64* && "$archs" == *x86_64* ]]
-          (cd build && shasum -a 256 -c DisplayDeck.dmg.sha256)
+        run: ./scripts/verify-bundle.sh
 
       - uses: actions/upload-artifact@v7
         with:
