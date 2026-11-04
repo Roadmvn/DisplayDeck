@@ -2,7 +2,7 @@
 
 A macOS menu bar app that puts every display control in one panel — brightness, contrast, volume, resolution, and virtual displays — including the controls macOS does not give you for external monitors.
 
-**[Download DisplayDeck.dmg](https://github.com/Roadmvn/DisplayDeck/releases/latest/download/DisplayDeck.dmg)** · [All releases](https://github.com/Roadmvn/DisplayDeck/releases)
+[![Download DisplayDeck.dmg](https://img.shields.io/github/v/release/Roadmvn/DisplayDeck?label=Download%20DisplayDeck.dmg&logo=apple&color=0a84ff)](https://github.com/Roadmvn/DisplayDeck/releases/latest/download/DisplayDeck.dmg) · [All releases](https://github.com/Roadmvn/DisplayDeck/releases)
 
 Requires macOS 13 or later. Apple Silicon for everything involving an external monitor.
 
