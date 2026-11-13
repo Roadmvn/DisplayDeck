@@ -24,6 +24,10 @@ jobs:
         id: version
         run: ./scripts/next-version.sh >> "$GITHUB_OUTPUT"
 
+      - name: Install dmgbuild
+        if: steps.version.outputs.tag != ''
+        run: pipx install dmgbuild==1.6.7
+
       - name: Build DMG
         if: steps.version.outputs.tag != ''
         env:
