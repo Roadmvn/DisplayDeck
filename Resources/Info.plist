@@ -6,6 +6,8 @@
 	<string>fr</string>
 	<key>CFBundleExecutable</key>
 	<string>DisplayDeck</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.roadmvn.DisplayDeck</string>
 	<key>CFBundleInfoDictionaryVersion</key>
