@@ -17,6 +17,10 @@ echo "Architectures : $archs"
 
 (cd build && shasum -a 256 -c DisplayDeck.dmg.sha256)
 
+# l'icône doit être dans le bundle et déclarée dans le plist, sinon le Finder montre l'icône générique
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$plist")" == "AppIcon" ]]
+file "$app/Contents/Resources/AppIcon.icns" | grep -q 'Mac OS X icon'
+
 # la release doit livrer la version qu'elle annonce
 if [[ -n "${VERSION:-}" ]]; then
     stamped="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
