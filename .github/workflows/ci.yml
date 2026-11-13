@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install dmgbuild
-        run: pipx install dmgbuild
+        run: pipx install dmgbuild==1.6.7
 
       - name: Build app and DMG
         run: ./scripts/make-dmg.sh
