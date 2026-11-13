@@ -31,7 +31,7 @@ Quit DisplayDeck from its menu, then delete `/Applications/DisplayDeck.app`.
 
 ## Building from source
 
-Requires the Xcode command line tools (Swift 6).
+Requires the Xcode command line tools (Swift 6). Building the DMG also needs [dmgbuild](https://github.com/dmgbuild/dmgbuild), which lays out the install window: `brew install pipx && pipx install dmgbuild`.
 
 ```sh
 ./scripts/build-app.sh   # universal build/DisplayDeck.app, signed ad hoc
